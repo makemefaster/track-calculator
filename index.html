@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Velodrome Speed and Gear Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for a cycling-themed look */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f7;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .card {
+            background-color: white;
+            box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .input-style {
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            width: 100%;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+        }
+        .input-style:focus {
+            outline: none;
+            border-color: #EF4444; /* Red focus color */
+        }
+        .tab-button.active {
+            border-color: #EF4444;
+            color: #EF4444;
+            background-color: #FEF2F2;
+        }
+        /* Custom scrollbar for the table */
+        #comparisonResults::-webkit-scrollbar {
+            height: 8px;
+        }
+        #comparisonResults::-webkit-scrollbar-thumb {
+            background: #fca5a5;
+            border-radius: 4px;
+        }
+        #comparisonResults::-webkit-scrollbar-track {
+            background: #f9f9f9;
+        }
+    </style>
+    <script>
+        // ETRTO Bead Seat Diameter (BSD) approximations in mm
+        const BSD_MAP = {
+            '700c': 622, // Standard track/road
+            '650c': 571, 
+            '26in': 559
+        };
+        const METERS_TO_INCHES = 39.3701; // 1 meter = 39.3701 inches
+        const DEFAULT_TYRE_WIDTH = 23;
+        const DEFAULT_WHEEL_TYPE = '700c';
+
+        // --- Core Application State & Logic ---
+        let activeTab = 'speed';
+
+        /**
+         * Calculates the estimated wheel circumference based on tyre details.
+         * Formula: Circumference (m) = (BSD + 2 * Tire Width) * PI / 1000
+         * @returns {number|null} Circumference in meters.
+         */
+        function calculateCircumference() {
+            const wheelType = document.getElementById('wheelType').value;
+            const tireWidthInput = document.getElementById('tireWidthMM').value;
+            const tireWidthMM = parseFloat(tireWidthInput);
+
+            const BSD = BSD_MAP[wheelType];
+            
+            if (!BSD || isNaN(tireWidthMM) || tireWidthMM <= 0) {
+                // Default to a known circumference if inputs are invalid
+                document.getElementById('circumferenceDisplay').textContent = `2.110 m`;
+                return 2.11; 
+            }
+
+            // Estimated overall wheel diameter = BSD + (2 * tireWidthMM)
+            const estimatedDiameterMM = BSD + (2 * tireWidthMM);
+            // Circumference in mm
+            const circumferenceMM = estimatedDiameterMM * Math.PI;
+            
+            // Circumference in meters
+            const circumferenceM = circumferenceMM / 1000;
+            
+            // Update the display label
+            document.getElementById('circumferenceDisplay').textContent = `${circumferenceM.toFixed(3)} m`;
+
+            return circumferenceM;
+        }
+
+
+        /**
+         * Switches the active tab view.
+         * @param {string} tabName - 'speed' or 'gear'.
+         */
+        function switchTab(tabName) {
+            activeTab = tabName;
+            
+            // Update button styles
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                if (btn.id === `${tabName}TabButton`) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+
+            // Update section visibility
+            document.querySelectorAll('.tab-content').forEach(content => {
+                if (content.id === `${tabName}Content`) {
+                    content.classList.remove('hidden');
+                } else {
+                    content.classList.add('hidden');
+                }
+            });
+
+            // Re-calculate results when switching to ensure display is fresh
+            if (tabName === 'gear') {
+                calculateGearRatio();
+                calculateGearOptions();
+            } else {
+                calculateSpeed();
+            }
+        }
+
+        // --- Speed Calculation Functions ---
+
+        /**
+         * Calculates and displays the speed based on time and laps.
+         */
+        function calculateSpeed() {
+            const timeInput = document.getElementById('timeSeconds');
+            const lapsInput = document.getElementById('lapNumber');
+            const lengthInput = document.getElementById('velodromeLength'); // Dynamic velodrome length
+            const resultDiv = document.getElementById('speedResults');
+            const messageDiv = document.getElementById('speedMessageBox');
+
+            // Clear previous messages and results
+            messageDiv.textContent = '';
+            messageDiv.classList.add('hidden');
+            resultDiv.innerHTML = '';
+            
+            const timeSeconds = parseFloat(timeInput.value);
+            const lapNumber = parseInt(lapsInput.value);
+            const velodromeLength = parseFloat(lengthInput.value);
+
+            if (isNaN(timeSeconds) || isNaN(lapNumber) || isNaN(velodromeLength) || timeSeconds <= 0 || lapNumber <= 0 || velodromeLength <= 0) {
+                if (activeTab === 'speed') {
+                    messageDiv.textContent = 'Please enter valid, positive numbers for Length, Time, and Laps.';
+                    messageDiv.classList.remove('hidden');
+                }
+                return;
+            }
+
+            // 1. Calculate Total Distance
+            const totalDistanceM = lapNumber * velodromeLength;
+            const totalDistanceKm = totalDistanceM / 1000;
+
+            // 2. Calculate Speed (m/s)
+            const speedMps = totalDistanceM / timeSeconds;
+
+            // 3. Calculate Speed (km/h) - Conversion factor is 3.6 (m/s * 3600 seconds/hour / 1000 meters/km)
+            const speedKmph = speedMps * 3.6;
+
+            // Format results
+            const distanceText = `${totalDistanceM.toLocaleString(undefined, { maximumFractionDigits: 0 })} m (${totalDistanceKm.toFixed(2)} km)`;
+            const speedMpsText = `${speedMps.toFixed(2)} m/s`;
+            const speedKmphText = `${speedKmph.toFixed(2)} km/h`;
+
+            // Update UI to show results
+            resultDiv.innerHTML = `
+                <div class="space-y-4">
+                    <div class="p-4 bg-gray-50 rounded-xl">
+                        <p class="text-sm font-medium text-gray-500">Total Distance Ridden</p>
+                        <p class="text-2xl font-bold text-gray-800">${distanceText}</p>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="p-4 bg-red-50 rounded-xl">
+                            <p class="text-sm font-medium text-red-600">Speed (m/s)</p>
+                            <p class="text-xl font-extrabold text-red-800">${speedMpsText}</p>
+                        </div>
+                        <div class="p-4 bg-red-50 rounded-xl">
+                            <p class="text-sm font-medium text-red-600">Speed (km/h)</p>
+                            <p class="text-xl font-extrabold text-red-800">${speedKmphText}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- Gear Calculation Functions ---
+
+        /**
+         * Calculates and displays the simple gear ratio and rollout, and gear inches.
+         */
+        function calculateGearRatio() {
+            const chainringInput = document.getElementById('simpleChainring');
+            const cogInput = document.getElementById('simpleCog');
+            
+            const resultDiv = document.getElementById('gearRatioResults');
+            const messageDiv = document.getElementById('gearMessageBox');
+            
+            messageDiv.textContent = '';
+            messageDiv.classList.add('hidden');
+            resultDiv.innerHTML = '';
+
+            const W = calculateCircumference(); // Circumference in meters
+            const C = parseFloat(chainringInput.value);
+            const T = parseFloat(cogInput.value);
+            
+            if (isNaN(C) || isNaN(T) || C <= 0 || T <= 0) {
+                 if (activeTab === 'gear') {
+                    messageDiv.textContent = 'Please enter valid, positive numbers for Chainring and Cog.';
+                    messageDiv.classList.remove('hidden');
+                }
+                return;
+            }
+
+            // Calculations
+            const gearRatio = C / T;
+            const rolloutMeters = gearRatio * W;
+            const cli = C + T; // Chain Length Index (Approximation)
+            
+            // FIX: Gear Inches = (Rollout in inches) / Pi
+            const rolloutInches = rolloutMeters * METERS_TO_INCHES;
+            const gearInches = rolloutInches / Math.PI;
+
+
+            // Display Results (Rollout, Ratio, CLI, Gear Inches)
+            resultDiv.innerHTML = `
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="p-4 bg-red-50 rounded-xl">
+                            <p class="text-sm font-medium text-red-600">Gear Ratio (C/T)</p>
+                            <p class="text-xl font-extrabold text-red-800">${gearRatio.toFixed(3)}</p>
+                        </div>
+                        <div class="p-4 bg-red-50 rounded-xl">
+                            <p class="text-sm font-medium text-red-600">Rollout (Meters)</p>
+                            <p class="text-xl font-extrabold text-red-800">${rolloutMeters.toFixed(2)} m</p>
+                        </div>
+                    </div>
+                     <div class="grid grid-cols-2 gap-4">
+                        <div class="p-4 bg-red-50 rounded-xl">
+                            <p class="text-sm font-medium text-red-600">Gear Inches</p>
+                            <p class="text-xl font-extrabold text-red-800">${gearInches.toFixed(1)} in</p>
+                        </div>
+                        <div class="p-4 bg-gray-50 rounded-xl">
+                            <p class="text-sm font-medium text-gray-500">Chain Length Index (C+T)</p>
+                            <p class="text-2xl font-bold text-gray-800">${cli.toFixed(0)}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        /**
+         * Calculates gear ratios and C+T values for multiple chainrings and cogs.
+         */
+        function calculateGearOptions() {
+            const chainringsInput = document.getElementById('availableChainrings').value;
+            const cogsInput = document.getElementById('availableCogs').value;
+            const comparisonDiv = document.getElementById('comparisonResults');
+            
+            const W = calculateCircumference(); // Circumference in meters
+
+            comparisonDiv.innerHTML = '';
+
+            // Parse inputs into arrays of unique, sorted numbers
+            const chainrings = [...new Set(chainringsInput.split(',').map(s => parseInt(s.trim())).filter(n => n > 0 && !isNaN(n)))].sort((a, b) => b - a);
+            const cogs = [...new Set(cogsInput.split(',').map(s => parseInt(s.trim())).filter(n => n > 0 && !isNaN(n)))].sort((a, b) => a - b);
+
+            if (chainrings.length === 0 || cogs.length === 0 || W === null || W <= 0) {
+                comparisonDiv.innerHTML = '<p class="text-gray-500 text-center p-4">Enter available components and valid tyre details to see comparison options.</p>';
+                return;
+            }
+
+            // Generate all combinations
+            const results = [];
+            chainrings.forEach(C => {
+                cogs.forEach(T => {
+                    const gearRatio = C / T;
+                    const rollout = gearRatio * W;
+                    const cli = C + T;
+                    
+                    // FIX: Gear Inches calculation
+                    const rolloutInches = rollout * METERS_TO_INCHES;
+                    const gearInches = rolloutInches / Math.PI;
+
+                    results.push({ C, T, gearRatio, rollout, cli, gearInches });
+                });
+            });
+
+            // Sort results by Rollout (fastest to slowest)
+            results.sort((a, b) => b.rollout - a.rollout);
+
+            // Build the table HTML
+            let tableHtml = `
+                <div class="overflow-x-auto rounded-xl border border-gray-200">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">C x T</th>
+                                <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ratio</th>
+                                <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rollout (m)</th>
+                                <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Gear Inches</th>
+                                <th class="px-3 py-3 text-left text-xs font-bold text-red-600 uppercase tracking-wider">C+T (Chain Index)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-100">
+            `;
+
+            let lastCli = null;
+
+            results.forEach(result => {
+                // Highlight combinations where C+T is similar (difference is 1 or less)
+                const isSimilarChain = lastCli !== null && Math.abs(result.cli - lastCli) <= 1;
+                const rowClass = isSimilarChain ? 'bg-yellow-50/50' : 'hover:bg-gray-50';
+                
+                tableHtml += `
+                    <tr class="${rowClass}">
+                        <td class="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">${result.C} x ${result.T}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-500">${result.gearRatio.toFixed(3)}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-700 font-semibold">${result.rollout.toFixed(2)}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-sm text-red-600 font-semibold">${result.gearInches.toFixed(1)}</td>
+                        <td class="px-3 py-2 whitespace-nowrap text-sm ${isSimilarChain ? 'font-bold text-yellow-800' : 'text-gray-600'}">${result.cli.toFixed(0)}</td>
+                    </tr>
+                `;
+                lastCli = result.cli;
+            });
+
+            tableHtml += `
+                        </tbody>
+                    </table>
+                </div>
+                <p class="mt-3 text-xs text-gray-500 italic">Rows with similar Rollout and C+T (Chain Index) in close proximity will likely require minimal change to chain tension.</p>
+            `;
+
+            comparisonDiv.innerHTML = tableHtml;
+        }
+
+        // Utility to handle Enter key press on inputs
+        function handleKeyPress(event, calculatorType) {
+            if (event.key === 'Enter') {
+                if (calculatorType === 'speed') {
+                    calculateSpeed();
+                } else if (calculatorType === 'simple' || calculatorType === 'tyre') {
+                    calculateGearRatio();
+                    calculateGearOptions();
+                }
+            }
+        }
+    </script>
+</head>
+<body onload="switchTab('speed')">
+    <div class="w-full max-w-xl mt-10 card p-6 rounded-2xl">
+        <header class="mb-6">
+            <h1 class="text-3xl font-extrabold text-gray-800 flex items-center mb-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-red-600 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+                </svg>
+               MakeMeFaster.com
+            </h1>
+            
+            <!-- Tab Navigation -->
+            <div class="flex border-b border-gray-200 mt-4">
+                <button id="speedTabButton" onclick="switchTab('speed')" class="tab-button flex-1 py-2 px-4 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-red-600 hover:border-red-300 transition duration-150">
+                    Speed Calculator
+                </button>
+                <button id="gearTabButton" onclick="switchTab('gear')" class="tab-button flex-1 py-2 px-4 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-red-600 hover:border-red-300 transition duration-150">
+                    Gear Calculator
+                </button>
+            </div>
+        </header>
+
+        <main class="space-y-6">
+
+            <!-- Global Error/Message Box (kept for potential future use) -->
+            <div id="messageBox" class="hidden p-3 text-sm text-red-800 bg-red-100 rounded-xl" role="alert">
+            </div>
+
+            <!-- 1. SPEED CALCULATOR CONTENT -->
+            <div id="speedContent" class="tab-content">
+                <p class="text-sm text-gray-500 mb-4">Calculate your average speed for an effort based on time and laps.</p>
+                
+                <!-- VELODROME LENGTH INPUT -->
+                <div class="mb-4 p-4 bg-gray-50 rounded-xl">
+                    <label for="velodromeLength" class="block text-sm font-bold text-gray-700 mb-1">Velodrome Length (Meters)</label>
+                    <input type="number" id="velodromeLength" value="250.0" step="1" placeholder="e.g., 250" class="input-style" oninput="calculateSpeed()" onkeypress="handleKeyPress(event, 'speed')">
+                </div>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label for="timeSeconds" class="block text-sm font-medium text-gray-700 mb-1">Time (in Seconds)</label>
+                        <input type="number" id="timeSeconds" value="13.0" placeholder="e.g., 13.0" class="input-style" onkeypress="handleKeyPress(event, 'speed')">
+                    </div>
+                    <div>
+                        <label for="lapNumber" class="block text-sm font-medium text-gray-700 mb-1">Laps Completed</label>
+                        <input type="number" id="lapNumber" value="1" placeholder="e.g., 1" class="input-style" onkeypress="handleKeyPress(event, 'speed')">
+                    </div>
+                </div>
+
+                <!-- Calculation Button -->
+                <button onclick="calculateSpeed()" class="w-full mt-6 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl transition duration-150 ease-in-out shadow-lg shadow-red-500/50 transform hover:scale-105 active:scale-100">
+                    Calculate Speed
+                </button>
+
+                <!-- Message Box for Errors -->
+                <div id="speedMessageBox" class="hidden mt-4 p-3 text-sm text-red-800 bg-red-100 rounded-xl" role="alert"></div>
+
+                <!-- Results Display -->
+                <div id="speedResults" class="pt-4 mt-4 border-t border-gray-100">
+                    <!-- Calculated speed results will appear here -->
+                </div>
+            </div>
+
+            <!-- 2. GEAR CALCULATOR CONTENT -->
+            <div id="gearContent" class="tab-content hidden">
+                <p class="text-sm text-gray-500 mb-4">Analyze your gear combinations using Chainring (C), Cog (T), and Wheel Circumference (W).</p>
+
+                <!-- Tyre Input and Circumference Display -->
+                <div class="mb-6 p-4 bg-gray-50 rounded-xl">
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Tyre Details for Circumference (W)</label>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="wheelType" class="block text-xs font-medium text-gray-700 mb-1">Wheel Type (Diameter)</label>
+                            <select id="wheelType" class="input-style bg-white" onchange="calculateGearRatio(); calculateGearOptions();">
+                                <option value="700c" selected>700c (Track/Road)</option>
+                                <option value="650c">650c</option>
+                                <option value="26in">26 inch</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="tireWidthMM" class="block text-xs font-medium text-gray-700 mb-1">Tyre Width ($\text{mm}$)</label>
+                            <input type="number" id="tireWidthMM" value="${DEFAULT_TYRE_WIDTH}" step="1" placeholder="e.g., 23" class="input-style" oninput="calculateGearRatio(); calculateGearOptions();" onkeypress="handleKeyPress(event, 'tyre')">
+                        </div>
+                    </div>
+                    <div class="mt-3 text-center">
+                        <p class="text-sm font-medium text-gray-500">Estimated Circumference:</p>
+                        <p id="circumferenceDisplay" class="text-xl font-bold text-red-600">2.110 m</p>
+                    </div>
+                </div>
+
+                <!-- Simple Gear Calculator -->
+                <h3 class="text-xl font-semibold text-gray-800 mb-3">Single Gear Analysis</h3>
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div>
+                        <label for="simpleChainring" class="block text-sm font-medium text-gray-700 mb-1">Chainring (C)</label>
+                        <input type="number" id="simpleChainring" value="50" placeholder="e.g., 50" class="input-style" oninput="calculateGearRatio()" onkeypress="handleKeyPress(event, 'simple')">
+                    </div>
+                    <div>
+                        <label for="simpleCog" class="block text-sm font-medium text-gray-700 mb-1">Cog (T)</label>
+                        <input type="number" id="simpleCog" value="15" placeholder="e.g., 15" class="input-style" oninput="calculateGearRatio()" onkeypress="handleKeyPress(event, 'simple')">
+                    </div>
+                </div>
+
+                <div id="gearRatioResults" class="mb-8 pt-4 border-t border-gray-100">
+                    <!-- Simple gear results appear here -->
+                </div>
+                
+                <!-- Gearing Options Comparison -->
+                <h3 class="text-xl font-semibold text-gray-800 mb-3 mt-6">Gearing Options Comparison (Chain Index)</h3>
+                <p class="text-sm text-gray-500 mb-4">Enter all available components to find combinations that have similar chain length (C+T) and compare them using **Rollout ($\text{m}$)** and **Gear Inches ($\text{in}$)**.</p>
+                <div class="space-y-4">
+                    <div>
+                        <label for="availableChainrings" class="block text-sm font-medium text-gray-700 mb-1">Available Chainrings (C) - Comma separated</label>
+                        <input type="text" id="availableChainrings" value="50, 51, 52, 53, 53, 55, 56" placeholder="e.g., 48, 49, 50" class="input-style" oninput="calculateGearOptions()" onkeypress="handleKeyPress(event, 'comparison')">
+                    </div>
+                    <div>
+                        <label for="availableCogs" class="block text-sm font-medium text-gray-700 mb-1">Available Cogs (T) - Comma separated</label>
+                        <input type="text" id="availableCogs" value="14, 15, 16" placeholder="e.g., 14, 15, 16" class="input-style" oninput="calculateGearOptions()" onkeypress="handleKeyPress(event, 'comparison')">
+                    </div>
+                </div>
+                
+                <div id="comparisonResults" class="mt-6 max-h-80 overflow-y-auto">
+                    <!-- Comparison table appears here -->
+                </div>
+                <div id="gearMessageBox" class="hidden mt-4 p-3 text-sm text-red-800 bg-red-100 rounded-xl" role="alert"></div>
+
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Run initial calculations on load
+        window.onload = function() {
+            // Set initial state based on the default tab
+            switchTab('speed'); 
+            
+            // Run calculations to populate initial views
+            calculateCircumference(); // Must run first to set W
+            calculateSpeed();
+            calculateGearRatio();
+            calculateGearOptions();
+        };
+    </script>
+</body>
+</html>
