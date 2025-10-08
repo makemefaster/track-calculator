@@ -136,7 +136,10 @@
          * Calculates and displays the speed based on time and laps.
          */
         function calculateSpeed() {
-            const timeInput = document.getElementById('timeSeconds');
+            // NEW: Separate inputs for minutes and seconds
+            const timeMinutesInput = document.getElementById('timeMinutes');
+            const timeSecondsInput = document.getElementById('timeSeconds');
+
             const lapsInput = document.getElementById('lapNumber');
             const lengthInput = document.getElementById('velodromeLength'); // Dynamic velodrome length
             const resultDiv = document.getElementById('speedResults');
@@ -147,13 +150,22 @@
             messageDiv.classList.add('hidden');
             resultDiv.innerHTML = '';
             
-            const timeSeconds = parseFloat(timeInput.value);
+            // Parse inputs
+            const timeMinutes = parseFloat(timeMinutesInput.value) || 0;
+            const secondsOnly = parseFloat(timeSecondsInput.value) || 0;
             const lapNumber = parseInt(lapsInput.value);
             const velodromeLength = parseFloat(lengthInput.value);
 
-            if (isNaN(timeSeconds) || isNaN(lapNumber) || isNaN(velodromeLength) || timeSeconds <= 0 || lapNumber <= 0 || velodromeLength <= 0) {
+            // Calculate total time in seconds
+            const totalTimeSeconds = (timeMinutes * 60) + secondsOnly;
+
+            if (
+                isNaN(timeMinutes) || isNaN(secondsOnly) ||
+                isNaN(lapNumber) || isNaN(velodromeLength) || 
+                totalTimeSeconds <= 0 || lapNumber <= 0 || velodromeLength <= 0
+            ) {
                 if (activeTab === 'speed') {
-                    messageDiv.textContent = 'Please enter valid, positive numbers for Length, Time, and Laps.';
+                    messageDiv.textContent = 'Please enter valid, positive numbers for Length, Time (Min/Sec), and Laps.';
                     messageDiv.classList.remove('hidden');
                 }
                 return;
@@ -164,7 +176,7 @@
             const totalDistanceKm = totalDistanceM / 1000;
 
             // 2. Calculate Speed (m/s)
-            const speedMps = totalDistanceM / timeSeconds;
+            const speedMps = totalDistanceM / totalTimeSeconds;
 
             // 3. Calculate Speed (km/h) - Conversion factor is 3.6 (m/s * 3600 seconds/hour / 1000 meters/km)
             const speedKmph = speedMps * 3.6;
@@ -229,7 +241,7 @@
             const rolloutMeters = gearRatio * W;
             const cli = C + T; // Chain Length Index (Approximation)
             
-            // FIX: Gear Inches = (Rollout in inches) / Pi
+            // FIX: Gear Inches = Rollout (in inches) / Pi
             const rolloutInches = rolloutMeters * METERS_TO_INCHES;
             const gearInches = rolloutInches / Math.PI;
 
@@ -397,9 +409,15 @@
                 </div>
                 
                 <div class="space-y-4">
-                    <div>
-                        <label for="timeSeconds" class="block text-sm font-medium text-gray-700 mb-1">Time (in Seconds)</label>
-                        <input type="number" id="timeSeconds" value="13.0" placeholder="e.g., 13.0" class="input-style" onkeypress="handleKeyPress(event, 'speed')">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="timeMinutes" class="block text-sm font-medium text-gray-700 mb-1">Time (Minutes)</label>
+                            <input type="number" id="timeMinutes" value="0" placeholder="e.g., 1" class="input-style" onkeypress="handleKeyPress(event, 'speed')">
+                        </div>
+                        <div>
+                            <label for="timeSeconds" class="block text-sm font-medium text-gray-700 mb-1">Time (Seconds & Decimals)</label>
+                            <input type="number" id="timeSeconds" value="13.0" step="0.1" placeholder="e.g., 13.0 or 30.5" class="input-style" onkeypress="handleKeyPress(event, 'speed')">
+                        </div>
                     </div>
                     <div>
                         <label for="lapNumber" class="block text-sm font-medium text-gray-700 mb-1">Laps Completed</label>
